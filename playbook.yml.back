@@ -1,0 +1,60 @@
+---
+- name: "Pip venv"
+  hosts: "ubuntu_server"
+  become: false
+  vars:
+    app_name: "hello"
+    mysql_password: "password"
+
+  tasks:
+  - name: "Install python3 and pip"
+    ansible.builtin.apt:
+            name: 
+               - "python3"
+               - "python3-pip"  
+            update_cache: true
+  
+  vars:
+    ansible_python_interpreter: /usr/bin/python3 #delete this
+  
+  - name: "Copy python files"
+    ansible.builtin.copy:
+      src: files/app
+      dest: /apps/{{app_name}}
+      owner: root       
+      group: root
+      mode: 0644
+
+  - name: "Install virtualenv via pip"
+    pip:
+     name: virtualenv
+     executable: pip3
+    debugger: "on_failed"
+
+
+  - name: "Install requirements"
+    pip:
+     requirements: /apps/{{app_name}}/app/requirements.txt
+     virtualenv: /apps/{{app_name}}/venv
+     virtualenv_command: /usr/bin/python2 -m venv
+
+  - name: "Copy service file"
+    ansible.builtin.template:
+     src: service.service.j2
+     dest: /etc/systemd/system/{{app_name}}.service
+     owner: vagrant
+     group: vagrant
+     mode: 0644
+
+  - name: "Add the MySQL database"
+    community.mysql.mysql_db:
+     name: service_db
+     state: present
+     login_user: root
+     login_password: "password"
+     check_implicit_admin: true
+
+  - name: "Start service"
+    service:
+     name: "{{ app_name }}"
+     state: started

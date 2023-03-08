@@ -1,0 +1,85 @@
+---
+- name: "Pip venv"
+  hosts: "ubuntu_server"
+  become: false
+
+  tasks:
+  - name: "Install python3 and pip"
+    ansible.builtin.apt:
+            name: 
+               - "python3"
+               - "python3-pip"
+               - "python3-setuptools"
+               - "python3-venv"
+               - "python3-pymysql"
+            state: "latest"  
+            update_cache: true
+
+- name: "Next step"
+  hosts: "ubuntu_server"
+  become: true
+  vars:
+    app_name: "hello"
+    mysql_password: "password"
+    # ansible_python_interpreter: /usr/bin/python3 #delete this
+  
+  tasks:
+  
+  - name: "Copy python files"
+    ansible.builtin.copy:
+      src: files/app
+      dest: /apps/{{app_name}}
+      owner: root       
+      group: root
+      mode: 0644
+
+
+  - name: "Install virtualenv via pip"
+    pip:
+     name: virtualenv
+     executable: pip3
+    debugger: "on_failed"
+
+
+  - name: "Install requirements"
+    pip:
+     requirements: /apps/{{app_name}}/app/requirements.txt
+     virtualenv: /apps/{{app_name}}/venv
+     virtualenv_command: /usr/bin/python3 -m venv
+    become: false
+
+  - name: "Copy service file"
+    ansible.builtin.template:
+     src: service.service.j2
+     dest: /etc/systemd/system/{{app_name}}.service
+     owner: root
+     group: root
+     mode: 0644
+  
+  - name: "Install MySQL server"    
+    ansible.builtin.apt:
+      name: "mysql-server"
+      state: "latest"
+      update_cache: "true"
+
+  - name: "Set up root user"
+    community.mysql.mysql_user:
+       name: "root"
+       password: "password"
+       login_user: "root"
+       login_password: "password"
+       check_implicit_admin: true
+       login_unix_socket: "/var/run/mysqld/mysqld.sock"
+
+  - name: "Add the MySQL database"
+    community.mysql.mysql_db:
+     name: service_db
+     state: present
+     login_user: root
+     login_password: "password"
+     check_implicit_admin: true
+
+  - name: "Start service"
+    service:
+     name: "{{ app_name }}"
+     state: started
